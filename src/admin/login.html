@@ -1,0 +1,123 @@
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="Cache-Control" content="no-siteapp"/>
+    <meta name="google" content="notranslate">
+    <title>服务器管理器 - 登录</title>
+    <script src="assets/vue2.js"></script>
+    <script src="assets/axios.min.js"></script>
+    <style>
+        body {margin: 0; background: #41a5ee;}
+        .container {display: table; height: 100%; width: 100%; position: absolute; min-width: 600px}
+        .container > div {display: table-row; height: 100%}
+        .container > div > div {display: table-cell; vertical-align: middle;}
+        .container > div > div > div {width: 100%; vertical-align: middle;}
+    
+        .login {
+            width: 450px;
+            height: 350px;
+            margin: auto;
+            background: #f3f3f3;
+            padding: 2em;
+        }
+    
+        .login > h1 {
+            margin-bottom: 2.5em;
+            font-size: 20px;
+            text-align: center;
+        }
+    
+        #login-button:hover {
+            background: #1099bd;
+        }
+
+        .login > input {
+            display: block;
+            width: 100%;
+            margin-top: 1em;
+            padding: .25em .5em;
+            font-size: 18px;
+            outline: none;
+            border: 1px solid #ccc;
+        }
+
+        .login > input:focus {
+            border: 1px solid #66ccff;
+        }
+    
+        #login-button {
+            font-size: 18px;
+            padding: .25em 0;
+            margin-top: 3em;
+            width: 100%;
+            display: block;
+            border: none;
+            outline: none;
+            color: white;
+            background: #39c5bb;
+            cursor: pointer;
+        }
+    
+        #message {
+            display: block;
+            font-size: 14px;
+            margin-top: 1.5em;
+            text-align: center;
+            color: #ee0000;
+        }
+    
+        #copyright {
+            display: block;
+            text-align: center;
+            font-size: 12px;
+            color: #c3c3c3;
+            position: relative;
+            top: 150px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container"><div><div><div>
+        <div class="login" id="app">
+            <h1>登录</h1>
+            <input type="text" id="username" placeholder="用户名" v-model="username" v-on:keyup.enter="focusToPassword"/>
+            <input type="password" id="password" placeholder="密码" v-model="password" v-on:keyup.enter="login"/>
+            <button id="login-button" v-on:click="login">登录</button>
+            <span id="message">&nbsp;</span>
+        </div>
+    </div></div></div></div>    
+</body>
+</html>
+<script>
+    var app = new Vue({
+        el: '#app',
+        data: {
+            username: '',
+            password: ''
+        },
+        methods: {
+            focusToPassword() {
+                document.querySelector('#password').focus();
+            },
+            login: function() {
+                axios.get('/api/v2/token/create', { params: {
+                    username: this.username,
+                    password: this.password
+                }}).then(function(response) {
+                    document.querySelector('#login-button').innerHTML = '登录成功';
+                    localStorage.setItem('dev.luotianyi.techsupportservice.jixia.terraria.servermanager.token', response.data.token);
+                    location.href = '.';
+                }).catch(function(error) {
+                    if (error.response && (error.response.status == 401 || error.response.status == 403)) {
+                        document.getElementById('message').innerHTML = '用户名或密码错误';
+                        return;
+                    }
+                    document.querySelector('#message').innerHTML = '网络错误';
+                });
+            }
+        }
+    });
+</script>

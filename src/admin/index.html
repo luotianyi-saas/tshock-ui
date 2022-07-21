@@ -1,0 +1,247 @@
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="Cache-Control" content="no-siteapp"/>
+    <meta name="google" content="notranslate">
+    <title>服务器管理器</title>
+    <script src="assets/vue2.js"></script>
+    <script src="assets/axios.min.js"></script>
+    <link rel="stylesheet" href="assets/awsl.min.css">
+    <style>
+        .aw-vh-container {
+            max-width: 1920px;
+            margin: auto !important;
+        }
+        @font-face {
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            font-family: "JetBrainsMono";
+            src: url("assets/JetBrainsMono-Regular.eot") format("embedded-opentype"),
+                 url("assets/JetBrainsMono-Regular.woff2") format("woff2");
+        }
+        .aw-p h3:first-child { margin-top: 0; }
+        .console-stdout {
+            background-color: #0e0e0e;
+            color: #f3f3f3;
+            font-family: JetBrainsMono, Consolas, monospace;
+            height: 40em;
+            overflow-y: scroll;
+            margin-bottom: 0;
+        }
+        .console-stdin {
+            background-color: #0e0e0e;
+            color: #f3f3f3;
+            font-family: JetBrainsMono, Consolas, monospace;
+            border: none;
+            outline-style: none;
+            padding: 16px;
+            width: 100%;
+        }
+        .console-stdout code {
+            font-family: JetBrainsMono, Consolas, monospace;
+            display: block;
+            word-break: break-all;
+            white-space: break-spaces;
+        }
+        .console-stdout .con-line-stdin { color: #66ccff; }
+        .console-stdout .con-line-stderr { color: #ee0000; }
+        footer { margin-top: 100px; }
+
+        .model { z-index: 1001; position: fixed;  width: 100vw;  height: 100vh; top: 0px; left: 0px; }
+        .model-frame { background: white; width: 600px; height: 300px; margin: 100px auto; padding: 30px; }
+        .model-text { font-size: 18px; font-weight: 400; }
+        .model-buttons { margin-top: 100px; text-align: center; }
+        .model-buttons button { margin: 8px 1.5em; }
+        .model-override { position: fixed; top: 0px; left: 0px; width: 100vw; height: 100vh; background: gray; opacity: 0.8; z-index: 1000; zoom: 1; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="aw-vh-container aw-vh-container-align-header">
+            <h1 style="margin-top: 100px;">服务器管理器</h1>
+            <div class="aw-p">
+                <h3>服务器概况</h3>
+                <table style="font-weight: 600; margin-bottom: 2em;">
+                    <tr>
+                        <td style="width: 8em;">状态</td>
+                        <td v-if="status.status == 200" style="color: #498205;">运行</td>
+                        <td v-else style="color: #a4262c;">错误</td>
+                    </tr>
+                    <tr>
+                        <td>名称</td>
+                        <td>{{status.name}}</td>
+                    </tr>
+                    <tr>
+                        <td>玩家</td>
+                        <td v-if="status.playercount != null">{{status.playercount}}/{{status.maxplayers}}</td>
+                    </tr>
+                    <tr>
+                        <td>版本</td>
+                        <td>{{status.serverversion}}</td>
+                    </tr>
+                    <tr>
+                        <td>世界</td>
+                        <td>{{status.world}}</td>
+                    </tr>
+                    <tr>
+                        <td>刷新间隔</td>
+                        <td>10 秒</td>
+                    </tr>
+                </table>
+                <button class="aw-btn aw-bg-red aw-hov-dark" v-on:click="buttonClickOff">关机</button>
+                <button class="aw-btn aw-bg-orange aw-hov-dark" v-on:click="buttonClickRestart">重启</button>
+                <button class="aw-btn aw-bg-lightblue aw-hov-dark" v-on:click="buttonClickSave">存档</button>
+                <button class="aw-btn aw-bg-cyan aw-hov-dark" v-on:click="logout">登出</a>
+            </div>
+            <div class="aw-p">
+                <h3>服务器控制台</h3>
+                <pre class="console-stdout"><code v-for="line in console.stdout" :class="line.class">{{line.text}}</code></pre>
+                <input type="fuckedge" class="console-stdin" placeholder="在此输入命令" v-model="console.stdin" v-on:keyup.enter="invokeConsole" autocomplete="off"/>
+            </div>
+        </div>
+        <div class="model" v-show="model.show">
+            <div class="model-frame">
+                <div class="model-text" v-html="model.text"></div>
+                <div class="model-buttons">
+                    <button v-for="button in model.buttons" :class="'aw-bg-' + button.type" class="aw-btn aw-hov-dark" @click="button.event">{{button.text}}</button>
+                </div>
+            </div>
+        </div>
+        <div class="model-override" v-show="model.show"></div>
+    </div>
+    <footer class="aw-footer">
+        <div class="aw-footer-copyright aw-footer-copyright-s" style="text-align: center;">
+            <ul>
+                <li>&copy; 2022 季夏 版权所有</li> |
+                <li><a target="_blank" href="/admin/license.html">开源许可证</a></li> |
+                <li>由 <a target="_blank" href="https://luotianyi.dev/">天依网络</a> 提供技术支持</li>
+            </ul>
+        </div>
+    </footer>
+</body>
+<script>
+    function consoleScroll() {
+        const stdout = document.querySelector(".console-stdout");
+        stdout.scrollTop = stdout.scrollHeight;
+    }
+    var app = new Vue({
+        el: "#app",
+        data: {
+            model: {
+                show: false,
+                buttons: [],
+                text: ""
+            },
+            server: "/api",
+            token: "invalidToken",
+            status: {status: 500},
+            console: {
+                stdout: [{
+                    text: "Have a lot of fun!",
+                    class: "con-line-stdout"
+                }],
+                stdin: null
+            }
+        },
+        methods: {
+            htmlConsoleLog (text, style="stdout") {
+                this.console.stdout.push({
+                    text: text,
+                    class: "con-line-" + style
+                });
+                consoleScroll();
+                setTimeout(consoleScroll, 100);
+            },
+            htmlConsoleError (text) { this.htmlConsoleLog(text, "stderr");},
+            htmlConsoleEcho (text) { this.htmlConsoleLog(text, "stdin");},
+            invokeConsole () {
+                const command = this.console.stdin;
+                this.console.stdin = "";
+                this.htmlConsoleEcho(command);
+                axios.get(`${this.server}/v3/server/rawcmd`, {params: {token: this.token, cmd: command}}).then((response) => {
+                    if (response.data.status != 200) { this.htmlConsoleError(`Error: status is [${response.data.status}]`); }
+                    if (response.data.response && response.data.response.length > 0) {
+                        response.data.response.forEach((line) => {
+                            this.htmlConsoleLog(line);
+                        });
+                    }                    
+                }).catch((error) => {
+                    this.htmlConsoleError(`Error: ${error}`);
+                });
+            },
+            updateStatus () {
+                axios.get(`${this.server}/v2/server/status`, {params: {token: this.token}}).then((response) => {
+                    this.status = response.data;
+                }).catch((error) => {
+                    if (error.response && (error.response.status == 401 || error.response.status == 403)) {
+                        return this.enterModel("登录过期，请重新登录。", [{text: "去登录", "type": "green", "event": function() { location.href = "login.html"; }}])
+                    }
+                    this.status = {status: 500}
+                });
+            },
+            enterModel(text, buttons) {
+                this.model = {
+                    show: true,
+                    buttons: buttons,
+                    text: text
+                };
+                document.body.style.overflow = "hidden";
+            },
+            exitModel() {
+                this.model = {
+                    show: false,
+                    buttons: [],
+                    text: ""
+                };
+                document.body.style.overflow = null;
+            },
+            buttonClickSave () {
+                this.enterModel("真的要存档吗？", [
+                    {text: "是的", "type": "green", "event": this.modelConfirmSave},
+                    {text: "才不", "type": "cyan", "event": this.exitModel},
+                ]);
+            },
+            buttonClickOff () {
+                this.enterModel("这个功能危险了，小孩子不要碰哦。<br><br>（其实是还在开发中啦）", [
+                    {text: "好吧εミ(ο_ _)ο", "type": "blue", "event": this.exitModel},
+                ]);
+            },
+            buttonClickRestart () {
+                this.enterModel("这个功能危险了，小孩子不要碰哦。<br><br>（其实是还在开发中啦）", [
+                    {text: "好吧εミ(ο_ _)ο", "type": "blue", "event": this.exitModel},
+                ]);
+            },
+            logout () {
+                localStorage.removeItem("dev.luotianyi.techsupportservice.jixia.terraria.servermanager.token");
+                location.href = "login.html";
+            },
+            modelConfirmSave() {
+                this.enterModel("正在保存中……", []);
+                axios.get(`${this.server}/v2/world/save`, {params: {token: this.token}}).then((response) => {
+                    this.enterModel("保存成功", [
+                        {text: "你真棒", "type": "green", "event": this.exitModel},
+                    ]);
+                }).catch((error) => {
+                    this.enterModel("保存失败<br><br>" + error.toString().replace(/\n/g, "<br>"), [
+                        {text: "这真是令人尴尬", "type": "blue", "event": this.exitModel},
+                    ]);
+                });
+            }
+        },
+        mounted () {
+            this.token = localStorage.getItem("dev.luotianyi.techsupportservice.jixia.terraria.servermanager.token") || "no-token";
+            axios.get(`${this.server}/tokentest`, {params: {token: this.token}}).then((response) => {
+                // do nothing, login success
+            }).catch((error) => {
+                this.logout();
+            });
+            this.updateStatus();
+            setInterval(this.updateStatus, 10000);
+        }
+    });
+</script>
+</html>
